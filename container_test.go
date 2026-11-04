@@ -697,22 +697,36 @@ func TestBuildProvideInvokeChain(t *testing.T) {
 	}
 }
 
-func TestBuildErrAccumulatesAcrossOptions(t *testing.T) {
-	type missing struct{}
-
+// TestBuildFailsFast: Build stops at the first failing option — the
+// error is prefixed with the failing option, and later options never
+// run.
+func TestBuildFailsFast(t *testing.T) {
+	var invoked bool
 	err := build(
 		diz.Provide(func() string { return "ok" }),
 		diz.Provide("not a constructor"),
-		diz.Invoke(func(m missing) { t.Fatal("must not run") }),
+		diz.Invoke(func() { invoked = true }),
 	)
-	if err == nil {
-		t.Fatal("Build() = nil, want accumulated errors")
+	if err == nil || !strings.Contains(err.Error(), "must provide constructor function") {
+		t.Fatalf("Build() = %v, want the bad constructor reported", err)
 	}
-	if !strings.Contains(err.Error(), "must provide constructor function") {
-		t.Errorf("Build() should report the bad constructor, got: %v", err)
+	if !strings.Contains(err.Error(), "diz.Provide(string)") {
+		t.Errorf("Build() should name the failing option, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "missing type") {
-		t.Errorf("Build() should report the unsatisfied dependency, got: %v", err)
+	if invoked {
+		t.Fatal("options after the first failure must not run")
+	}
+}
+
+// TestBuildIsOneShot: options land in the root New built — a second
+// Build re-registers them and fails on duplicate provides.
+func TestBuildIsOneShot(t *testing.T) {
+	c := diz.New(diz.Provide(func() int { return 1 }))
+	if err := c.Build(); err != nil {
+		t.Fatalf("first Build: %v", err)
+	}
+	if err := c.Build(); err == nil {
+		t.Fatal("second Build must fail on duplicate registrations")
 	}
 }
 
