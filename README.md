@@ -13,6 +13,11 @@ dig and fx fall short on type inference. It does not adopt fx's runtime:
 no lifecycle management, no Start/Stop hooks, no module-tree runners —
 every option translates directly into dig registrations at `Build`.
 
+diz is for assembling dependencies at startup: declare the graph, `Build`
+once during initialization, and let it run. It is not a runtime
+container — nothing registers after Build, and it does not serve dynamic
+use once the application has started.
+
 ## Highlights
 
 - **Options are data** — options are records you can inspect and rewrite:
@@ -31,8 +36,9 @@ every option translates directly into dig registrations at `Build`.
 - **No lifecycle** — no Start/Stop hooks, no background goroutines, no
   assembler state; options translate directly into dig registrations at
   `Build`.
-- **Errors reported once** — errors from all options are joined with
-  `errors.Join` and returned by `Build` in one shot.
+- **Fail fast** — `Build` applies the options in order and returns on
+  the first failure, the error prefixed with the failing option;
+  later options never run.
 
 ## Requirements
 
@@ -62,9 +68,9 @@ if err := diz.New(
 }
 ```
 
-- Two phases: `New` collects the options; `Build` creates a fresh dig
-  container and applies them in order, returning the joined errors —
-  each prefixed with the failing option.
+- Two phases: `New` builds the dig root and collects the options;
+  `Build` applies them in order and returns on the first failure —
+  the error prefixed with the failing option.
 - Without an invoke nothing runs: end the declaration with `Invoke`,
   `Populate`, or the terminal `(*Container).Resolve[T]()`, which extracts
   a value and forces the graph to execute.
@@ -229,16 +235,17 @@ The `opts` variadic parameters accept raw dig options.
 
 ## Execution model
 
-`New(opts...)` collects the options; `Build` applies them to a fresh
-dig container, in order.
+`New(opts...)` builds the dig root and collects the options; `Build`
+applies them to that root, in order, returning on the first failure.
 
 `Resolve[T]()` is the terminal form: it appends a `Populate` and builds,
 returning the extracted value — the guarantee that the graph runs.
-`Build` and `Resolve` re-apply every option into a fresh dig container,
-so a second call re-runs every side effect.
+`Build` and `Resolve` are one-shot: the options land in the root `New`
+built, so a second call re-registers them and fails on duplicate
+provides.
 
 There is no intermediate representation beyond the records themselves:
 options are data records, `Build` translates them directly into dig
-registrations, and errors are joined into the return value. dig stays
-lazy — dependencies resolve at Invoke time, so registration-time errors
-surface together in one report.
+registrations, and the first error stops the build. dig stays lazy —
+dependencies resolve at Invoke time, so graph errors (missing
+dependencies, cycles) surface at the first invoke.

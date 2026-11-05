@@ -3,6 +3,11 @@
 // interface). It is a thin wrapper, not the next fx: no lifecycle, no
 // module-tree runners — options register straight into dig.
 //
+// diz is for assembling dependencies at startup: declare the graph,
+// Build once during initialization, and let it run. It is not a
+// runtime container — nothing registers after Build, and it does not
+// serve dynamic use once the application has started.
+//
 // Typical usage:
 //
 //	if err := diz.New(
